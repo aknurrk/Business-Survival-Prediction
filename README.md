@@ -1,47 +1,135 @@
-# Why do some businesses survive for years, while others with similar characteristics close quickly?
+# Business Survival Prediction (Yelp Restaurants)
 
-Understanding factors that affect the duration of a business is an interesting question to research
-for a person with statistics and machine learning knowledge. Restaurants and small businesses
-operate in a highly competitive environment, where customer attention, local market conditions, and
-other not obvious characteristics jointly influence the long-term development story of the business.
-Knowing which characteristics are correlated with longer business lifetimes can help owners,
-investors, and policymakers make more informed decisions.
+Predict which restaurants become **long-lived** and explain what drives business lifetime using engineered features, unsupervised structure discovery (PCA + clustering), and nonlinear ML (RF/GBM).  
+Source analysis: `Final project analysis.pdf` :contentReference[oaicite:0]{index=0}
 
-Our project conducts research using restaurant information on Yelp, which is one of the most
-comprehensive public enterprise datasets available. The Yelp open dataset provides rich
-high-dimensional information, enabling us to examine the business performance from traditional
-structured features (ratings, number of reviews, location, category) as well as behavioral and time
-signals (timestamped check-ins and early customer activities). From this data, we construct
-measures of early popularity, chain status, local competition, ratings, and review volume, and define
-business lifetime in months. Our goal is to combine unsupervised structure discovery, interpretable
-linear modeling, and non-linear machine learning methods to understand the relationship between
-different dimensions of business behavior and lifetime. We also implement random forests,
-spline-based regressions, and gradient boosting machines to study how closure risk varies with
-competition across different price levels.
+---
 
-In this project, we will research three questions: (i) whether dimension-reduction and clustering can
-create interpretable higher-level features for business survival models, (ii) how strongly our
-engineered features differ from linear behavior results, and (iii) how closure risk is associated with
-local competitive density across different price levels. While answering these questions, we find that
-PCA and K-means mainly help us interpret the structure of the data, separating “high-review,
-low-rating” businesses from “high-competition” ones without materially changing linear-model AUC
-(≈0.56 in all sparse linear variants). When we move to nonlinear models, test AUC rises from about
-0.68 for logistic and spline models to roughly 0.74 for gradient boosting, so extra flexibility yields
-clear but moderate gains. We also document that the probability of closure increases with city-level
-restaurant counts at all price levels and is noticeably higher for mid- and high-priced restaurants
-than for the cheapest ones.
+## Dataset
+- **Yelp Open Dataset** (restaurant businesses)
+- Unit: **business**
+- Signals used: ratings, review counts, timestamped reviews/check-ins, location (city), categories, price level :contentReference[oaicite:1]{index=1}
 
-The main feature-engineering idea is second-layer structure: instead of stopping at raw variables
-like review volume or competition, we compress them into principal components and cluster labels
-that act as “business archetypes.” For example, PC1 loads heavily on local competition and early
-review volume, PC2 on early ratings, and our K-means clusters isolate patterns such as “high
-competition, high volume” versus “high rating, low volume.” This lets us talk about survival not just
-in terms of single variables but in terms of recognizable business profiles.
-Beyond the core regression and classification tools from class, we use LOESS smoothing to
-visualize raw relationships between engineered features and lifetime, and partial dependence
-plots with tree ensembles to study nonlinear effects such as the diminishing-returns pattern of early
-popularity and the near-linear effect of competition. Lastly, our analysis on local competition showed
-that it had a positive impact on the closure of restaurants but the shape of this relationship varied
-across different price levels. Using various machine learning models we concluded that more
-expensive restaurants were marked sensitive to competitive saturation whereas less expensive
-restaurants remained comparatively resilient to local competition.
+---
+
+## Target Definitions
+### 1) Business lifetime (months)
+`lifetime_months = last recorded review/check-in − first recorded activity` :contentReference[oaicite:2]{index=2}
+
+### 2) Long-lived classification
+`long_lived = 1` if business lifetime is **≥ 75th percentile** of lifetime distribution; else `0` :contentReference[oaicite:3]{index=3}
+
+> Plot to include: `figures/lifetime_distribution.png` (histogram; dashed line = 75th percentile cutoff)
+
+---
+
+## Features (Engineered)
+- **Early popularity:** check-ins in first 6 months (`early_checkins_6m`), sqrt-transformed to reduce skew; shows strong nonlinear relationship with lifetime (diminishing returns) :contentReference[oaicite:4]{index=4}  
+- **Competition (city-level):**
+  - `n_city_restaurants`: restaurants in same city
+  - `n_same_cat`: same-category restaurants in same city :contentReference[oaicite:5]{index=5}  
+  (City-level used because ZIP/postal codes are inconsistent in the dataset.) :contentReference[oaicite:6]{index=6}
+- **Chain status:** `is_chain` (name appears ≥ 2 times); chains show higher median lifetime :contentReference[oaicite:7]{index=7}  
+- **Price level:** extracted from `RestaurantsPriceRange2` (levels 1–4) :contentReference[oaicite:8]{index=8}
+
+> Plots to include:
+- `figures/early_popularity_loess.png` (lifetime vs sqrt(early_checkins_6m) + LOESS)
+- `figures/competition_loess.png` (lifetime vs competition + LOESS)
+- `figures/chain_boxplot.png` (lifetime by chain status)
+
+---
+
+## Unsupervised Learning (Interpretability)
+### PCA (standardized continuous features)
+Interpretable components: :contentReference[oaicite:9]{index=9}
+- **PC1:** market exposure / competition density (competition features load heavily)
+- **PC2:** activity / engagement (review totals + early review activity)
+- **PC3:** reputation (early rating)
+
+PCA improves interpretability but **does not improve sparse linear AUC**. :contentReference[oaicite:10]{index=10}
+
+> Plots to include:
+- `figures/pca_variance.png`
+- `figures/pca_biplot.png`
+
+### Clustering (business archetypes)
+**KMeans (k=4)** yields interpretable profiles: :contentReference[oaicite:11]{index=11}
+1) High rating, moderate volume, low competition  
+2) Moderate rating, very high review volume (dense markets)  
+3) Low rating, low early activity  
+4) Mid rating, high competition intensity  
+
+Ward hierarchical + GMM show consistent structure and transitional overlap. :contentReference[oaicite:12]{index=12}
+
+> Plots to include:
+- `figures/kmeans_pca.png`
+- `figures/ward_dendrogram.png`
+- `figures/gmm_pca.png`
+
+---
+
+## Supervised Prediction (Long-Lived)
+Split: **70/30 stratified train/test** :contentReference[oaicite:13]{index=13}  
+Models: Logistic, CART, Random Forest, GBM (tree models tuned via 5-fold CV, ROC-AUC). :contentReference[oaicite:14]{index=14}
+
+### Test ROC-AUC (reported)
+- Logistic: **0.781**
+- Random Forest: **0.805**
+- GBM: **0.836**
+(CART has lower AUC / less stable threshold behavior.) :contentReference[oaicite:15]{index=15}
+
+> Plot to include: `figures/roc_long_lived.png`
+
+---
+
+## Model Interpretation
+### Random Forest feature importance (top drivers)
+Review count and early check-ins dominate; chain/open status matter; competition and stars contribute but less than engagement/scale. :contentReference[oaicite:16]{index=16}
+
+> Plot to include: `figures/rf_importance.png`
+
+### Partial dependence
+- **Early popularity PDP:** sharp gains at low–moderate values, then plateau (diminishing returns) :contentReference[oaicite:17]{index=17}  
+- **Competition PDP:** mild curvature, mostly small adjustment effect :contentReference[oaicite:18]{index=18}
+
+> Plots to include:
+- `figures/pdp_early_popularity.png`
+- `figures/pdp_competition.png`
+
+---
+
+## Closure Risk vs Competition (Price-Level Heterogeneity)
+Outcome: `closed = 1` if `is_open == 0` :contentReference[oaicite:19]{index=19}  
+Main predictors: competition (`n_city_restaurants`, `n_same_cat`), `price_level`, rating, review count; includes interactions with price. :contentReference[oaicite:20]{index=20}
+
+Reported test performance:
+- Logistic: **Accuracy ~0.68**, **AUC ~0.69**
+- Spline logistic: **Accuracy ~0.68**, **AUC ~0.70** :contentReference[oaicite:21]{index=21}
+
+Findings:
+- Closure probability increases with city-level restaurant density at all price levels
+- Effect is **steeper for mid/high-priced** restaurants; price level 1 is flatter (more resilient) :contentReference[oaicite:22]{index=22}
+
+> Plots to include:
+- `figures/closure_competition_by_price.png` (nonlinear effect by price)
+- `figures/roc_closure_logit_vs_spline.png`
+
+---
+
+## Practical Takeaways (from findings)
+- Very low early popularity is an “at-risk” flag  
+- Competition alone is not a strong nonlinear driver of lifetime, but it matters for closure in interaction with price  
+- Chain status is a structural advantage signal :contentReference[oaicite:23]{index=23}
+
+---
+
+## Notes / Repo TODO (optional)
+- Add exported figures from the PDF into `figures/` and update links above.
+- Keep a single `requirements.txt` + reproducible run notebook/script.
+
+---
+
+## Acknowledgements
+Yelp Open Dataset.  
+AI tools were used for debugging + wording; authors verified all results. :contentReference[oaicite:24]{index=24}
+
