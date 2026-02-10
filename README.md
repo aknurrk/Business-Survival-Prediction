@@ -114,7 +114,7 @@ Findings:
 
 ---
 
-## Practical Takeaways (from findings)
+## Summary
 - Very low early popularity is an “at-risk” flag  
 - Competition alone is not a strong nonlinear driver of lifetime, but it matters for closure in interaction with price  
 - Chain status is a structural advantage signal
